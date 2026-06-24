@@ -14,6 +14,9 @@ async function startServer() {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
+  // Serve the src/assets folder statically so that dynamically referenced images are always accessible in production too.
+  app.use('/src/assets', express.static(path.join(process.cwd(), 'src/assets')));
+
   // Serve static assets or use Vite dev server
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

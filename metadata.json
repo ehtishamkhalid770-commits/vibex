@@ -1,0 +1,6 @@
+{
+  "name": "Vibex Streetwear",
+  "description": "A premium urban streetwear e-commerce storefront for VIBEX, featuring the City Beats Collection, Unisex Styles, Kids Collection, and an interactive shopping experience.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

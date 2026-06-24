@@ -330,6 +330,17 @@ export default function AdminDashboard({ products, setProducts, orders, setOrder
     });
   };
 
+  // Handle Delete Order Record
+  const handleDeleteOrder = (orderId: string) => {
+    if (confirm('Are you sure you want to delete this order record? This action cannot be undone.')) {
+      setOrders(prev => {
+        const updated = prev.filter(o => o.id !== orderId);
+        localStorage.setItem('vibex_orders', JSON.stringify(updated));
+        return updated;
+      });
+    }
+  };
+
   // Metrics Calculations
   const totalRevenue = orders.reduce((sum, o) => o.status !== 'Cancelled' ? sum + o.total : sum, 0);
   const orderCount = orders.length;
@@ -931,6 +942,15 @@ export default function AdminDashboard({ products, setProducts, orders, setOrder
                               <option value="Delivered">Delivered</option>
                               <option value="Cancelled">Cancelled</option>
                             </select>
+
+                            <button 
+                              onClick={() => handleDeleteOrder(order.id)}
+                              className="p-1.5 rounded border border-zinc-800 text-zinc-500 hover:text-red-400 hover:border-red-900/40 hover:bg-red-950/20 transition-all cursor-pointer flex items-center justify-center gap-1.5 text-[9px] uppercase font-bold px-2.5"
+                              title="Delete order record"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Delete</span>
+                            </button>
                           </div>
                         </div>
 

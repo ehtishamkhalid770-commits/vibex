@@ -229,11 +229,11 @@ export default function App() {
 
             // Fetch orders
             const dbOrders = await dbGetOrders();
-            if (dbOrders) {
+            if (dbOrders && dbOrders.length > 0) {
               setOrders(dbOrders);
               localStorage.setItem('vibex_orders', JSON.stringify(dbOrders));
-            } else {
-              // Seed orders table if empty
+            } else if (dbOrders && dbOrders.length === 0) {
+              // Seed orders table if empty in Supabase but we have local orders
               for (const o of orders) {
                 await dbUpsertOrder(o);
               }
@@ -241,7 +241,7 @@ export default function App() {
 
             // Fetch users
             const dbUsers = await dbGetUsers();
-            if (dbUsers) {
+            if (dbUsers && dbUsers.length > 0) {
               const formattedUsers = dbUsers.map(u => ({
                 email: u.email,
                 name: u.name,
@@ -251,8 +251,8 @@ export default function App() {
               }));
               setRegisteredUsers(formattedUsers);
               localStorage.setItem('vibex_registered_users', JSON.stringify(formattedUsers));
-            } else {
-              // Seed users table if empty
+            } else if (dbUsers && dbUsers.length === 0) {
+              // Seed users table if empty in Supabase but we have local users
               for (const u of registeredUsers) {
                 await dbUpsertUser(u);
               }

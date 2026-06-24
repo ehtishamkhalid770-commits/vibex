@@ -374,6 +374,30 @@ export default function AdminDashboard({
 
         {/* Right Content Area */}
         <div className="flex-grow p-6 sm:p-8 overflow-y-auto bg-[#040404]">
+          {/* Missing Tables Notice */}
+          {isSupabaseConfigured && supabaseTest && supabaseTest.hasTables === false && (
+            <div className="mb-6 p-4 bg-amber-950/20 border border-amber-900/40 text-amber-300 rounded-lg text-xs font-mono flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-pulse">
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold text-amber-400 block uppercase tracking-wider text-[10px]">⚠️ Supabase Tables Missing / Tables Nahi Bani Hain</span>
+                  <p className="text-[11px] text-zinc-300 mt-1">
+                    Your database tables (vibex_products, vibex_orders, vibex_users) do not exist yet. Please run the SQL Setup Script to create them.
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => {
+                  setActiveTab('database');
+                  setShowSqlSchema(true);
+                }}
+                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-black font-mono text-[10px] font-bold uppercase rounded cursor-pointer self-start sm:self-center shrink-0 transition-colors"
+              >
+                SETUP TABLES NOW
+              </button>
+            </div>
+          )}
+
           <AnimatePresence mode="wait">
             
             {/* TAB: ANALYTICS */}

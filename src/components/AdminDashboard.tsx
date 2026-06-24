@@ -18,7 +18,8 @@ import {
   AlertCircle,
   Clock,
   Layers,
-  ChevronDown
+  ChevronDown,
+  Edit
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Product, Order } from '../types';
@@ -103,6 +104,9 @@ const CLOTHING_TEMPLATES = [
 export default function AdminDashboard({ products, setProducts, orders, setOrders, categories, setCategories, onClose }: AdminDashboardProps) {
   const [activeTab, setActiveTab] = useState<'analytics' | 'products' | 'orders'>('analytics');
   
+  // Editing State
+  const [editingId, setEditingId] = useState<string | null>(null);
+
   // Add Product Form State
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
@@ -118,6 +122,41 @@ export default function AdminDashboard({ products, setProducts, orders, setOrder
   const [isNew, setIsNew] = useState(true);
   const [formError, setFormError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+
+  const startEditProduct = (p: Product) => {
+    setEditingId(p.id);
+    setName(p.name);
+    setPrice(p.price.toString());
+    setCategory(p.category);
+    setGender(p.gender as any);
+    setImage(p.image);
+    setDesc(p.desc);
+    setSizes(p.sizes || []);
+    setColors(p.colors || []);
+    setIsNew(p.isNew || false);
+    setFormError('');
+    setSuccessMsg('Loaded details of "' + p.name + '" for editing.');
+    // Smooth scroll to top of form
+    const formBox = document.querySelector('.lg\\:col-span-5');
+    if (formBox) {
+      formBox.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  const cancelEditProduct = () => {
+    setEditingId(null);
+    setName('');
+    setPrice('');
+    setCategory('Tees');
+    setGender('Unisex');
+    setImage('');
+    setDesc('');
+    setSizes(['M', 'L', 'XL']);
+    setColors([{ name: 'Vintage Black', hex: '#1a1a1a' }]);
+    setIsNew(true);
+    setFormError('');
+    setSuccessMsg('');
+  };
 
   // Helpers for sizing checklist
   const sizeOptions = ['S', 'M', 'L', 'XL', 'XXL', '28', '30', '32', '34', '36', 'One Size', '4Y', '6Y', '8Y', '10Y', '12Y'];
@@ -205,39 +244,65 @@ export default function AdminDashboard({ products, setProducts, orders, setOrder
       return;
     }
 
-    const newProduct: Product = {
-      id: 'custom-' + Date.now(),
-      name,
-      price: priceNum,
-      category,
-      gender,
-      image,
-      desc,
-      rating: 5.0,
-      reviews: 1,
-      sizes,
-      colors,
-      isNew
-    };
+    if (editingId) {
+      // Edit Mode
+      setProducts(prev => {
+        const updated = prev.map(p => p.id === editingId ? {
+          ...p,
+          name,
+          price: priceNum,
+          category,
+          gender,
+          image,
+          desc,
+          sizes,
+          colors,
+          isNew
+        } : p);
+        localStorage.setItem('vibex_products', JSON.stringify(updated));
+        return updated;
+      });
 
-    setProducts(prev => {
-      const updated = [newProduct, ...prev];
-      localStorage.setItem('vibex_products', JSON.stringify(updated));
-      return updated;
-    });
+      setSuccessMsg('Product updated successfully!');
+      setTimeout(() => {
+        cancelEditProduct();
+      }, 500);
+    } else {
+      // Add Mode
+      const newProduct: Product = {
+        id: 'custom-' + Date.now(),
+        name,
+        price: priceNum,
+        category,
+        gender,
+        image,
+        desc,
+        rating: 5.0,
+        reviews: 1,
+        sizes,
+        colors,
+        isNew
+      };
 
-    setSuccessMsg('Product added successfully!');
-    
-    // Clear form
-    setName('');
-    setPrice('');
-    setCategory('Tees');
-    setGender('Unisex');
-    setImage('');
-    setDesc('');
-    setSizes(['M', 'L', 'XL']);
-    setColors([{ name: 'Vintage Black', hex: '#1a1a1a' }]);
-    setIsNew(true);
+      setProducts(prev => {
+        const updated = [newProduct, ...prev];
+        localStorage.setItem('vibex_products', JSON.stringify(updated));
+        return updated;
+      });
+
+      setSuccessMsg('Product added successfully!');
+      
+      // Clear form
+      setName('');
+      setPrice('');
+      setCategory('Tees');
+      setGender('Unisex');
+      setImage('');
+      setDesc('');
+      setSizes(['M', 'L', 'XL']);
+      setColors([{ name: 'Vintage Black', hex: '#1a1a1a' }]);
+      setIsNew(true);
+    }
   };
 
   // Handle Delete Product
@@ -498,9 +563,20 @@ export default function AdminDashboard({ products, setProducts, orders, setOrder
                   
                   {/* Add Product Form Box (Col: 5) */}
                   <div className="lg:col-span-5 bg-zinc-950 border border-zinc-900 p-6 rounded shadow-lg space-y-6">
-                    <h3 className="font-mono text-xs uppercase text-[#c25121] tracking-widest pb-3 border-b border-zinc-900 flex items-center gap-2">
-                      <PlusCircle className="w-4 h-4" />
-                      <span>PUBLISH STREETWEAR PIECE</span>
+                    <h3 className="font-mono text-xs uppercase text-[#c25121] tracking-widest pb-3 border-b border-zinc-900 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {editingId ? <Edit className="w-4 h-4" /> : <PlusCircle className="w-4 h-4" />}
+                        <span>{editingId ? 'EDIT STREETWEAR PIECE' : 'PUBLISH STREETWEAR PIECE'}</span>
+                      </div>
+                      {editingId && (
+                        <button
+                          type="button"
+                          onClick={cancelEditProduct}
+                          className="text-[9px] text-zinc-400 hover:text-white uppercase font-bold underline transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      )}
                     </h3>
 
                     {/* Pre-fill templates block */}
@@ -719,8 +795,8 @@ export default function AdminDashboard({ products, setProducts, orders, setOrder
                         type="submit"
                         className="w-full bg-[#c25121] hover:bg-[#a34117] text-white py-3 font-bold uppercase tracking-widest text-[10px] transition-all shadow-lg flex items-center justify-center gap-2 mt-2 cursor-pointer"
                       >
-                        <Plus className="w-4 h-4" />
-                        <span>PUBLISH TO LOOKBOOK</span>
+                        {editingId ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                        <span>{editingId ? 'UPDATE STREETWEAR PIECE' : 'PUBLISH TO LOOKBOOK'}</span>
                       </button>
 
                     </form>
@@ -771,13 +847,22 @@ export default function AdminDashboard({ products, setProducts, orders, setOrder
                                 ${p.price.toFixed(2)}
                               </td>
                               <td className="py-3 px-2 text-right">
-                                <button 
-                                  onClick={() => handleDeleteProduct(p.id)}
-                                  className="p-1.5 rounded text-zinc-500 hover:text-red-400 hover:bg-red-950/20 transition-all cursor-pointer"
-                                  title="Delete product"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
+                                <div className="flex justify-end gap-1.5">
+                                  <button 
+                                    onClick={() => startEditProduct(p)}
+                                    className="p-1.5 rounded text-zinc-500 hover:text-sky-400 hover:bg-sky-950/20 transition-all cursor-pointer"
+                                    title="Edit product"
+                                  >
+                                    <Edit className="w-4 h-4" />
+                                  </button>
+                                  <button 
+                                    onClick={() => handleDeleteProduct(p.id)}
+                                    className="p-1.5 rounded text-zinc-500 hover:text-red-400 hover:bg-red-950/20 transition-all cursor-pointer"
+                                    title="Delete product"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           ))}

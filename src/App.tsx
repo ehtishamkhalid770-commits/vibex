@@ -136,8 +136,27 @@ export default function App() {
 
   // Account State
   const [accountOpen, setAccountOpen] = useState(false);
-  const [userEmail, setUserEmail] = useState('ehtisham.khalid770@gmail.com');
-  const [points, setPoints] = useState(250);
+  const [currentUser, setCurrentUser] = useState<{ email: string; name: string; points: number; isAdmin?: boolean } | null>(() => {
+    const saved = localStorage.getItem('vibex_current_user');
+    return saved ? JSON.parse(saved) : null;
+  });
+  
+  const [registeredUsers, setRegisteredUsers] = useState<any[]>(() => {
+    const saved = localStorage.getItem('vibex_registered_users');
+    if (saved) return JSON.parse(saved);
+    return [
+      { email: 'ali.khan@gmail.com', name: 'Ali Khan', password: 'password123', points: 300 },
+      { email: 'sophia.m@gmail.com', name: 'Sophia Martinez', password: 'password123', points: 450 }
+    ];
+  });
+
+  // Auth Inputs
+  const [authTab, setAuthTab] = useState<'login' | 'register'>('login');
+  const [authName, setAuthName] = useState('');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authConfirmPassword, setAuthConfirmPassword] = useState('');
+  const [authError, setAuthError] = useState('');
 
   // Filters State
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
@@ -187,6 +206,13 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('vibex_favorites', JSON.stringify(favorites));
   }, [favorites]);
+
+  useEffect(() => {
+    if (checkoutOpen && currentUser) {
+      setBuyerName(currentUser.name);
+      setBuyerEmail(currentUser.email);
+    }
+  }, [checkoutOpen, currentUser]);
 
   const triggerToast = (message: string) => {
     setToast(message);
@@ -394,16 +420,20 @@ export default function App() {
               <Search className="w-5 h-5 sm:w-6 sm:h-6 text-gray-800 hover:text-black" />
             </button>
 
-            {/* Admin Console Hub Trigger Button */}
-            <button 
-              id="admin-btn"
-              onClick={() => setIsAdminOpen(true)} 
-              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#c25121]/10 text-[#c25121] border border-[#c25121]/30 hover:bg-[#c25121] hover:text-white rounded text-[10px] font-mono font-black uppercase tracking-wider transition-all duration-300 cursor-pointer"
-              title="Open Admin Dashboard"
-            >
-              <Shield className="w-3.5 h-3.5 animate-pulse" />
-              <span className="hidden lg:inline">ADMIN</span>
-            </button>
+            {/* Admin Console Hub Trigger Button (Only visible if logged in user is Admin) */}
+            {currentUser?.isAdmin && (
+              <button 
+                id="admin-btn"
+                onClick={() => {
+                  setIsAdminOpen(true);
+                }} 
+                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#c25121]/10 text-[#c25121] border border-[#c25121]/30 hover:bg-[#c25121] hover:text-white rounded text-[10px] font-mono font-black uppercase tracking-wider transition-all duration-300 cursor-pointer"
+                title="Open Admin Dashboard"
+              >
+                <Shield className="w-3.5 h-3.5 animate-pulse" />
+                <span className="hidden lg:inline">ADMIN</span>
+              </button>
+            )}
 
             {/* Profile Button */}
             <button 
@@ -1170,7 +1200,24 @@ export default function App() {
                   e.preventDefault();
                   if (!newsletterEmail.trim()) return;
                   setNewsletterStatus('success');
-                  setPoints(points + 100); // add registration points
+                  if (currentUser) {
+                    const updatedUser = {
+                      ...currentUser,
+                      points: currentUser.points + 100
+                    };
+                    setCurrentUser(updatedUser);
+                    localStorage.setItem('vibex_current_user', JSON.stringify(updatedUser));
+                    
+                    // Also update in registeredUsers
+                    setRegisteredUsers(prevUsers => {
+                      const updatedUsers = prevUsers.map(u => u.email.toLowerCase() === currentUser.email.toLowerCase() ? {
+                        ...u,
+                        points: u.points + 100
+                      } : u);
+                      localStorage.setItem('vibex_registered_users', JSON.stringify(updatedUsers));
+                      return updatedUsers;
+                    });
+                  }
                   triggerToast('Welcome! 100 loyalty points awarded.');
                 }}
                 className="w-full max-w-md flex flex-col sm:flex-row items-stretch gap-3 relative"
@@ -1913,7 +1960,10 @@ export default function App() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 0.6 }}
               exit={{ opacity: 0 }}
-              onClick={() => setAccountOpen(false)}
+              onClick={() => {
+                setAccountOpen(false);
+                setAuthError('');
+              }}
               className="fixed inset-0 bg-black z-50 cursor-pointer"
             />
 
@@ -1922,17 +1972,22 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.95, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              className="fixed inset-4 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[450px] bg-zinc-950 border border-zinc-900 z-50 p-6 sm:p-8 shadow-2xl rounded flex flex-col"
+              className="fixed inset-4 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[500px] sm:max-h-[85vh] overflow-y-auto bg-zinc-950 border border-zinc-900 z-50 p-6 sm:p-8 shadow-2xl rounded flex flex-col scrollbar-thin scrollbar-thumb-zinc-800"
             >
               {/* Header */}
               <div className="flex justify-between items-center pb-4 border-b border-zinc-900 mb-6">
                 <div className="flex items-center gap-2">
                   <User className="w-5 h-5 text-[#c25121]" />
-                  <h3 className="text-base font-bold font-display uppercase tracking-wider">MEMBER PROFILE</h3>
+                  <h3 className="text-base font-bold font-display uppercase tracking-wider">
+                    {currentUser ? 'MEMBER PROFILE' : 'INSIDER HUB LOGIN'}
+                  </h3>
                 </div>
                 <button 
                   id="close-account-btn"
-                  onClick={() => setAccountOpen(false)}
+                  onClick={() => {
+                    setAccountOpen(false);
+                    setAuthError('');
+                  }}
                   className="p-1 rounded-full border border-zinc-800 text-gray-400 hover:text-white hover:border-white transition-all cursor-pointer"
                   aria-label="Close profile"
                 >
@@ -1940,63 +1995,370 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Loyalty reward Card */}
-              <div className="bg-gradient-to-r from-[#c25121] to-[#e76f51] p-5 rounded-lg text-white mb-6 relative overflow-hidden shadow-lg">
-                <div className="absolute right-0 bottom-0 opacity-10 font-display font-black text-7xl select-none">VIBEX</div>
-                <span className="font-mono text-[9px] uppercase tracking-widest bg-black/20 px-2 py-0.5 rounded">LOYALTY PROGRAM</span>
-                <h4 className="text-2xl font-black mt-2 font-display">{points} CREDITS</h4>
-                <p className="text-[10px] opacity-80 mt-1 font-mono">Tier level: BRONZE INSIDER</p>
+              {currentUser ? (
+                /* LOGGED IN VIEW */
+                <div className="space-y-6">
+                  {currentUser.isAdmin ? (
+                    /* ADMIN VIEW */
+                    <div className="space-y-4">
+                      <div className="bg-[#c25121]/10 border border-[#c25121]/30 p-4 rounded text-center">
+                        <span className="text-[10px] text-orange-400 block font-mono font-bold tracking-widest uppercase mb-1">SYSTEM CONTROLLER MODE</span>
+                        <h4 className="text-lg font-black text-white font-display uppercase">WELCOME, ADMIN JOHN ALEX!</h4>
+                        <p className="text-[10px] text-zinc-500 font-mono mt-1">Full read/write permissions for lookbook & orders</p>
+                      </div>
 
-                <div className="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-[10px] font-mono">
-                  <span>NEXT REWARD AT 500 CREDITS</span>
-                  <span className="underline cursor-pointer hover:text-black">VIEW BENEFITS</span>
-                </div>
-              </div>
+                      <div className="grid grid-cols-2 gap-3 text-center">
+                        <div className="bg-zinc-900 border border-zinc-900 p-3 rounded">
+                          <span className="text-[9px] text-zinc-500 uppercase font-mono block">TOTAL PIECES</span>
+                          <span className="text-lg font-bold text-white font-mono">{allProducts.length} items</span>
+                        </div>
+                        <div className="bg-zinc-900 border border-zinc-900 p-3 rounded">
+                          <span className="text-[9px] text-zinc-500 uppercase font-mono block">TOTAL ORDERS</span>
+                          <span className="text-lg font-bold text-white font-mono">{orders.length} orders</span>
+                        </div>
+                      </div>
 
-              {/* Profile Details fields */}
-              <div className="space-y-4 font-mono text-xs">
-                <div>
-                  <label className="block text-zinc-500 uppercase text-[9px] mb-1">MEMBER EMAIL</label>
-                  <input 
-                    type="email" 
-                    value={userEmail}
-                    onChange={(e) => setUserEmail(e.target.value)}
-                    className="w-full bg-black border border-zinc-800 rounded px-3 py-2 text-white outline-none focus:border-[#c25121] transition-all"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-zinc-500 uppercase text-[9px] mb-1">LIFETIME ORDERS</label>
-                    <div className="w-full bg-zinc-900 border border-zinc-900 rounded px-3 py-2 text-white">4 ORDERS</div>
-                  </div>
-                  <div>
-                    <label className="block text-zinc-500 uppercase text-[9px] mb-1">SAVED ADDRESSES</label>
-                    <div className="w-full bg-zinc-900 border border-zinc-900 rounded px-3 py-2 text-white">2 ADDRESSES</div>
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-zinc-900 mt-6">
-                  <h5 className="font-bold text-white text-[10px] uppercase tracking-wider mb-2">RECENT ORDER HISTORY</h5>
-                  <div className="bg-black border border-zinc-900 p-3 rounded flex justify-between items-center text-[10px]">
-                    <div>
-                      <span className="font-bold text-[#c25121]">ORDER #19245</span>
-                      <span className="text-zinc-500 block">Delivered on June 12, 2026</span>
+                      <button 
+                        onClick={() => {
+                          setAccountOpen(false);
+                          setIsAdminOpen(true);
+                        }}
+                        className="w-full bg-[#c25121] hover:bg-[#a34117] text-white py-3 rounded font-mono font-bold text-xs uppercase tracking-[0.1em] transition-all flex items-center justify-center gap-2 shadow-lg"
+                      >
+                        <Shield className="w-4 h-4 animate-pulse" />
+                        LAUNCH CONTROL DASHBOARD
+                      </button>
                     </div>
-                    <span className="text-white font-bold">$116.00</span>
-                  </div>
-                </div>
+                  ) : (
+                    /* NORMAL USER VIEW */
+                    <div className="space-y-6">
+                      {/* Loyalty reward Card */}
+                      <div className="bg-gradient-to-r from-[#c25121] to-[#e76f51] p-5 rounded text-white relative overflow-hidden shadow-lg">
+                        <div className="absolute right-0 bottom-0 opacity-10 font-display font-black text-7xl select-none">VIBEX</div>
+                        <span className="font-mono text-[9px] uppercase tracking-widest bg-black/20 px-2 py-0.5 rounded">LOYALTY CREDITS</span>
+                        <h4 className="text-2xl font-black mt-2 font-display">{currentUser.points} CREDITS</h4>
+                        <p className="text-[10px] opacity-80 mt-1 font-mono uppercase">
+                          TIER LEVEL: {currentUser.points < 200 ? 'BRONZE INSIDER' : currentUser.points < 500 ? 'SILVER INSIDER' : 'GOLD PREMIUM'}
+                        </p>
 
-                <button 
-                  onClick={() => {
-                    triggerToast('Logged out successfully.');
-                    setAccountOpen(false);
-                  }}
-                  className="w-full py-2.5 border border-zinc-800 hover:border-red-500/30 hover:text-red-500 text-gray-400 rounded text-[10px] font-mono uppercase tracking-widest transition-all mt-4"
-                >
-                  SIGN OUT OF INSIDER HUB
-                </button>
-              </div>
+                        <div className="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-[10px] font-mono">
+                          <span>{currentUser.points < 500 ? `NEXT LEVEL REWARD AT 500 CREDITS` : 'MAXIMUM PRESTIGE LEVEL REACHED'}</span>
+                          <span className="underline cursor-pointer hover:text-black" onClick={() => triggerToast('Exclusive loyalty rewards are automatically calculated in checkout!')}>VIEW BENEFITS</span>
+                        </div>
+                      </div>
+
+                      {/* User Profile fields */}
+                      <div className="space-y-3 font-mono text-xs">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-zinc-500 uppercase text-[9px] mb-1">MEMBER NAME</label>
+                            <div className="w-full bg-zinc-900 border border-zinc-900 rounded px-3 py-2 text-white font-bold">{currentUser.name}</div>
+                          </div>
+                          <div>
+                            <label className="block text-zinc-500 uppercase text-[9px] mb-1">MEMBER EMAIL</label>
+                            <div className="w-full bg-zinc-900 border border-zinc-900 rounded px-3 py-2 text-white truncate">{currentUser.email}</div>
+                          </div>
+                        </div>
+
+                        {/* Order Tracking Section */}
+                        <div className="pt-4 border-t border-zinc-900 mt-4">
+                          <h5 className="font-bold text-white text-[10px] uppercase tracking-wider mb-3">YOUR ORDER STATUS & TRACKING</h5>
+                          <div className="space-y-4 max-h-[220px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-zinc-800">
+                            {(() => {
+                              const userOrders = orders.filter(o => o.buyerEmail.toLowerCase() === currentUser.email.toLowerCase());
+                              if (userOrders.length === 0) {
+                                return (
+                                  <div className="text-center py-6 text-zinc-500 bg-zinc-900/30 border border-zinc-900 rounded">
+                                    <p className="text-[10px]">No orders found for {currentUser.email}.</p>
+                                    <p className="text-[9px] mt-1 text-zinc-600">Place an order with this email address to track it here!</p>
+                                  </div>
+                                );
+                              }
+                              return userOrders.map(o => {
+                                const steps = ['Pending', 'Shipped', 'Delivered'];
+                                const stepIdx = steps.indexOf(o.status);
+                                return (
+                                  <div key={o.id} className="bg-black border border-zinc-900 p-4 rounded space-y-3">
+                                    <div className="flex justify-between items-center text-[10px]">
+                                      <div>
+                                        <span className="font-bold text-orange-500">ORDER #{o.id.toUpperCase()}</span>
+                                        <span className="text-zinc-500 block text-[9px]">{o.date}</span>
+                                      </div>
+                                      <div className="text-right">
+                                        <span className="text-white font-bold block">${o.total.toFixed(2)}</span>
+                                        <span className="text-[8px] uppercase font-mono px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-400 border border-zinc-700">
+                                          {o.status}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    {/* Tracking Status Timeline */}
+                                    <div className="pt-1">
+                                      <div className="flex justify-between text-[8px] font-mono text-zinc-500 uppercase">
+                                        <span className={stepIdx >= 0 ? 'text-orange-500 font-bold' : ''}>Pending</span>
+                                        <span className={stepIdx >= 1 ? 'text-orange-500 font-bold' : ''}>Shipped</span>
+                                        <span className={stepIdx >= 2 ? 'text-orange-500 font-bold' : ''}>Delivered</span>
+                                      </div>
+                                      <div className="h-1 bg-zinc-900 rounded-full flex mt-1 overflow-hidden">
+                                        <div 
+                                          className="bg-orange-500 h-full transition-all duration-300" 
+                                          style={{ width: o.status === 'Pending' ? '15%' : o.status === 'Shipped' ? '50%' : '100%' }}
+                                        />
+                                      </div>
+                                    </div>
+
+                                    {/* Order items inside tracking card */}
+                                    <div className="space-y-1 pt-1.5 border-t border-zinc-900">
+                                      {o.items.map((item, i) => (
+                                        <div key={i} className="flex items-center gap-2 text-[9px] text-zinc-400">
+                                          <img 
+                                            referrerPolicy="no-referrer"
+                                            src={item.image} 
+                                            alt={item.name} 
+                                            className="w-6 h-6 rounded object-cover border border-zinc-800"
+                                          />
+                                          <div className="flex-grow min-w-0">
+                                            <p className="truncate font-bold text-zinc-300">{item.name}</p>
+                                            <p className="text-[8px] text-zinc-500">Size: {item.selectedSize} | Qty: {item.quantity}</p>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              });
+                            })()}
+                          </div>
+                        </div>
+
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Sign Out Action Button */}
+                  <button 
+                    onClick={() => {
+                      setCurrentUser(null);
+                      localStorage.removeItem('vibex_current_user');
+                      triggerToast('Signed out of the Insider Hub.');
+                    }}
+                    className="w-full py-2.5 border border-zinc-800 hover:border-red-500/30 hover:text-red-500 text-gray-400 rounded text-[10px] font-mono uppercase tracking-widest transition-all cursor-pointer"
+                  >
+                    SIGN OUT OF INSIDER HUB
+                  </button>
+                </div>
+              ) : (
+                /* AUTHENTICATION FLOW (LOGIN/REGISTER TABS) */
+                <div className="space-y-5">
+                  <div className="flex border-b border-zinc-900">
+                    <button
+                      onClick={() => { setAuthTab('login'); setAuthError(''); }}
+                      className={`flex-1 pb-3 text-xs font-mono font-bold uppercase tracking-wider border-b-2 transition-all ${
+                        authTab === 'login' 
+                          ? 'border-[#c25121] text-white' 
+                          : 'border-transparent text-zinc-500 hover:text-zinc-300'
+                      }`}
+                    >
+                      LOG IN
+                    </button>
+                    <button
+                      onClick={() => { setAuthTab('register'); setAuthError(''); }}
+                      className={`flex-1 pb-3 text-xs font-mono font-bold uppercase tracking-wider border-b-2 transition-all ${
+                        authTab === 'register' 
+                          ? 'border-[#c25121] text-white' 
+                          : 'border-transparent text-zinc-500 hover:text-zinc-300'
+                      }`}
+                    >
+                      CREATE ACCOUNT
+                    </button>
+                  </div>
+
+                  {authError && (
+                    <div className="bg-red-950/40 border border-red-900/60 p-3 rounded text-red-400 text-[10px] font-mono text-center flex items-center justify-center gap-1.5">
+                      <span className="inline-block w-1.5 h-1.5 bg-red-500 rounded-full animate-ping" />
+                      {authError}
+                    </div>
+                  )}
+
+                  {authTab === 'login' ? (
+                    /* LOGIN FORM */
+                    <form 
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        setAuthError('');
+                        if (!authEmail || !authPassword) {
+                          setAuthError('Please enter both email and password.');
+                          return;
+                        }
+                        const emailLower = authEmail.trim().toLowerCase();
+                        
+                        // Check fixed admin
+                        if (emailLower === 'johnalex@gmail.com' && authPassword === 'johnalex123') {
+                          const adminUser = { email: 'johnalex@gmail.com', name: 'John Alex', points: 9999, isAdmin: true };
+                          setCurrentUser(adminUser);
+                          localStorage.setItem('vibex_current_user', JSON.stringify(adminUser));
+                          triggerToast('Welcome Admin John Alex!');
+                          setAuthEmail('');
+                          setAuthPassword('');
+                          setAccountOpen(false); // Close login modal
+                          setIsAdminOpen(true);  // Open Admin Dashboard directly
+                          return;
+                        }
+                        
+                        // Check registered users
+                        const matched = registeredUsers.find(u => u.email.toLowerCase() === emailLower && u.password === authPassword);
+                        if (matched) {
+                          const loggedUser = { email: matched.email, name: matched.name, points: matched.points || 0 };
+                          setCurrentUser(loggedUser);
+                          localStorage.setItem('vibex_current_user', JSON.stringify(loggedUser));
+                          triggerToast(`Welcome back, ${matched.name}!`);
+                          setAuthEmail('');
+                          setAuthPassword('');
+                        } else {
+                          setAuthError('Invalid email or password.');
+                        }
+                      }}
+                      className="space-y-4 text-left"
+                    >
+                      <div>
+                        <label className="block text-zinc-500 uppercase text-[9px] font-mono mb-1">EMAIL ADDRESS</label>
+                        <input 
+                          type="email" 
+                          required
+                          placeholder="e.g. customer@example.com" 
+                          value={authEmail}
+                          onChange={(e) => setAuthEmail(e.target.value)}
+                          className="w-full bg-black border border-zinc-800 rounded px-3 py-2 text-white outline-none focus:border-[#c25121] transition-all text-xs font-mono"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-zinc-500 uppercase text-[9px] font-mono mb-1">PASSWORD</label>
+                        <input 
+                          type="password" 
+                          required
+                          placeholder="••••••••" 
+                          value={authPassword}
+                          onChange={(e) => setAuthPassword(e.target.value)}
+                          className="w-full bg-black border border-zinc-800 rounded px-3 py-2 text-white outline-none focus:border-[#c25121] transition-all text-xs font-mono"
+                        />
+                      </div>
+
+                      <button 
+                        type="submit"
+                        className="w-full bg-[#c25121] hover:bg-[#a34117] text-white py-3 rounded font-mono font-bold text-xs uppercase tracking-widest transition-all cursor-pointer"
+                      >
+                        SIGN INTO THE HUB
+                      </button>
+                    </form>
+                  ) : (
+                    /* REGISTER FORM */
+                    <form 
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        setAuthError('');
+                        if (!authName || !authEmail || !authPassword || !authConfirmPassword) {
+                          setAuthError('Please fill in all registration fields.');
+                          return;
+                        }
+                        const emailLower = authEmail.trim().toLowerCase();
+                        
+                        if (authPassword !== authConfirmPassword) {
+                          setAuthError('Passwords do not match.');
+                          return;
+                        }
+                        
+                        if (emailLower === 'johnalex@gmail.com') {
+                          setAuthError('This email is reserved.');
+                          return;
+                        }
+                        
+                        if (registeredUsers.some(u => u.email.toLowerCase() === emailLower)) {
+                          setAuthError('Email already registered.');
+                          return;
+                        }
+                        
+                        const newUser = {
+                          name: authName.trim(),
+                          email: emailLower,
+                          password: authPassword,
+                          points: 200 // Welcome points!
+                        };
+                        
+                        const updatedUsers = [...registeredUsers, newUser];
+                        setRegisteredUsers(updatedUsers);
+                        localStorage.setItem('vibex_registered_users', JSON.stringify(updatedUsers));
+                        
+                        const sessionUser = { name: newUser.name, email: newUser.email, points: newUser.points };
+                        setCurrentUser(sessionUser);
+                        localStorage.setItem('vibex_current_user', JSON.stringify(sessionUser));
+                        
+                        triggerToast('Account created successfully! 200 credits rewarded.');
+                        setAuthName('');
+                        setAuthEmail('');
+                        setAuthPassword('');
+                        setAuthConfirmPassword('');
+                      }}
+                      className="space-y-4 text-left"
+                    >
+                      <div>
+                        <label className="block text-zinc-500 uppercase text-[9px] font-mono mb-1">FULL NAME</label>
+                        <input 
+                          type="text" 
+                          required
+                          placeholder="e.g. Ehtisham Khalid" 
+                          value={authName}
+                          onChange={(e) => setAuthName(e.target.value)}
+                          className="w-full bg-black border border-zinc-800 rounded px-3 py-2 text-white outline-none focus:border-[#c25121] transition-all text-xs font-mono"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-zinc-500 uppercase text-[9px] font-mono mb-1">EMAIL ADDRESS</label>
+                        <input 
+                          type="email" 
+                          required
+                          placeholder="e.g. customer@example.com" 
+                          value={authEmail}
+                          onChange={(e) => setAuthEmail(e.target.value)}
+                          className="w-full bg-black border border-zinc-800 rounded px-3 py-2 text-white outline-none focus:border-[#c25121] transition-all text-xs font-mono"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-zinc-500 uppercase text-[9px] font-mono mb-1">PASSWORD</label>
+                        <input 
+                          type="password" 
+                          required
+                          placeholder="••••••••" 
+                          value={authPassword}
+                          onChange={(e) => setAuthPassword(e.target.value)}
+                          className="w-full bg-black border border-zinc-800 rounded px-3 py-2 text-white outline-none focus:border-[#c25121] transition-all text-xs font-mono"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-zinc-500 uppercase text-[9px] font-mono mb-1">CONFIRM PASSWORD</label>
+                        <input 
+                          type="password" 
+                          required
+                          placeholder="••••••••" 
+                          value={authConfirmPassword}
+                          onChange={(e) => setAuthConfirmPassword(e.target.value)}
+                          className="w-full bg-black border border-zinc-800 rounded px-3 py-2 text-white outline-none focus:border-[#c25121] transition-all text-xs font-mono"
+                        />
+                      </div>
+
+                      <button 
+                        type="submit"
+                        className="w-full bg-[#c25121] hover:bg-[#a34117] text-white py-3 rounded font-mono font-bold text-xs uppercase tracking-widest transition-all cursor-pointer"
+                      >
+                        CREATE INSIDER ACCOUNT
+                      </button>
+                    </form>
+                  )}
+                </div>
+              )}
 
             </motion.div>
           </>
@@ -2096,6 +2458,25 @@ export default function App() {
                     localStorage.setItem('vibex_orders', JSON.stringify(updated));
                     return updated;
                   });
+
+                  if (currentUser) {
+                    const pointsEarned = Math.round(cartTotal);
+                    const updatedUser = {
+                      ...currentUser,
+                      points: currentUser.points + pointsEarned
+                    };
+                    setCurrentUser(updatedUser);
+                    localStorage.setItem('vibex_current_user', JSON.stringify(updatedUser));
+                    
+                    setRegisteredUsers(prevUsers => {
+                      const updatedUsers = prevUsers.map(u => u.email.toLowerCase() === currentUser.email.toLowerCase() ? {
+                        ...u,
+                        points: u.points + pointsEarned
+                      } : u);
+                      localStorage.setItem('vibex_registered_users', JSON.stringify(updatedUsers));
+                      return updatedUsers;
+                    });
+                  }
 
                   setCart([]);
                   setCheckoutOpen(false);

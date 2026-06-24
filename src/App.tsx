@@ -27,6 +27,16 @@ import { motion, AnimatePresence } from 'motion/react';
 import { products, staticUnisexGallery } from './data';
 import { Product, CartItem, Review, Order, OrderItem } from './types';
 import AdminDashboard from './components/AdminDashboard';
+import { 
+  isSupabaseConfigured, 
+  dbGetProducts, 
+  dbUpsertProduct, 
+  dbGetOrders, 
+  dbUpsertOrder, 
+  dbGetUsers, 
+  dbUpsertUser,
+  testConnection
+} from './lib/supabase';
 
 export default function App() {
   // Products Local Persistence state
@@ -197,6 +207,64 @@ export default function App() {
 
   // Notifications Toast State
   const [toast, setToast] = useState<string | null>(null);
+
+  // Load initial data from Supabase if configured, otherwise rely on localStorage/fallback
+  useEffect(() => {
+    async function loadSupabaseData() {
+      if (isSupabaseConfigured) {
+        try {
+          const conn = await testConnection();
+          if (conn.success && conn.hasTables !== false) {
+            // Fetch products
+            const dbProducts = await dbGetProducts();
+            if (dbProducts && dbProducts.length > 0) {
+              setAllProducts(dbProducts);
+              localStorage.setItem('vibex_products', JSON.stringify(dbProducts));
+            } else {
+              // Seed products table if empty
+              for (const p of allProducts) {
+                await dbUpsertProduct(p);
+              }
+            }
+
+            // Fetch orders
+            const dbOrders = await dbGetOrders();
+            if (dbOrders) {
+              setOrders(dbOrders);
+              localStorage.setItem('vibex_orders', JSON.stringify(dbOrders));
+            } else {
+              // Seed orders table if empty
+              for (const o of orders) {
+                await dbUpsertOrder(o);
+              }
+            }
+
+            // Fetch users
+            const dbUsers = await dbGetUsers();
+            if (dbUsers) {
+              const formattedUsers = dbUsers.map(u => ({
+                email: u.email,
+                name: u.name,
+                password: u.password,
+                points: u.points,
+                isAdmin: u.isAdmin
+              }));
+              setRegisteredUsers(formattedUsers);
+              localStorage.setItem('vibex_registered_users', JSON.stringify(formattedUsers));
+            } else {
+              // Seed users table if empty
+              for (const u of registeredUsers) {
+                await dbUpsertUser(u);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Failed to auto-sync with Supabase on mount:', error);
+        }
+      }
+    }
+    loadSupabaseData();
+  }, []);
 
   // Save Cart and Favorites to Local Storage
   useEffect(() => {
@@ -1207,6 +1275,10 @@ export default function App() {
                     };
                     setCurrentUser(updatedUser);
                     localStorage.setItem('vibex_current_user', JSON.stringify(updatedUser));
+                    
+                    if (isSupabaseConfigured) {
+                      dbUpsertUser(updatedUser);
+                    }
                     
                     // Also update in registeredUsers
                     setRegisteredUsers(prevUsers => {
@@ -2289,6 +2361,16 @@ export default function App() {
                         setRegisteredUsers(updatedUsers);
                         localStorage.setItem('vibex_registered_users', JSON.stringify(updatedUsers));
                         
+                        if (isSupabaseConfigured) {
+                          dbUpsertUser({
+                            email: newUser.email,
+                            name: newUser.name,
+                            password: newUser.password,
+                            points: newUser.points,
+                            isAdmin: false
+                          });
+                        }
+
                         const sessionUser = { name: newUser.name, email: newUser.email, points: newUser.points };
                         setCurrentUser(sessionUser);
                         localStorage.setItem('vibex_current_user', JSON.stringify(sessionUser));
@@ -2456,6 +2538,9 @@ export default function App() {
                   setOrders(prev => {
                     const updated = [newOrder, ...prev];
                     localStorage.setItem('vibex_orders', JSON.stringify(updated));
+                    if (isSupabaseConfigured) {
+                      dbUpsertOrder(newOrder);
+                    }
                     return updated;
                   });
 
@@ -2467,6 +2552,10 @@ export default function App() {
                     };
                     setCurrentUser(updatedUser);
                     localStorage.setItem('vibex_current_user', JSON.stringify(updatedUser));
+                    
+                    if (isSupabaseConfigured) {
+                      dbUpsertUser(updatedUser);
+                    }
                     
                     setRegisteredUsers(prevUsers => {
                       const updatedUsers = prevUsers.map(u => u.email.toLowerCase() === currentUser.email.toLowerCase() ? {

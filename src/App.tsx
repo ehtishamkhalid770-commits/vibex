@@ -2538,11 +2538,22 @@ export default function App() {
                   setOrders(prev => {
                     const updated = [newOrder, ...prev];
                     localStorage.setItem('vibex_orders', JSON.stringify(updated));
-                    if (isSupabaseConfigured) {
-                      dbUpsertOrder(newOrder);
-                    }
                     return updated;
                   });
+
+                  if (isSupabaseConfigured) {
+                    dbUpsertOrder(newOrder).then(res => {
+                      if (res && res.success) {
+                        triggerToast('Order placed & synchronized with Supabase! ID: #' + newOrder.id);
+                      } else {
+                        const errMsg = res?.error?.message || res?.error || 'Database table/schema issue';
+                        console.error('Supabase Sync Error:', res?.error);
+                        triggerToast(`Order placed locally! Supabase Sync Failed: ${errMsg}`);
+                      }
+                    });
+                  } else {
+                    triggerToast('Order placed successfully (Offline Mode)! ID: #' + newOrder.id);
+                  }
 
                   if (currentUser) {
                     const pointsEarned = Math.round(cartTotal);
@@ -2554,7 +2565,11 @@ export default function App() {
                     localStorage.setItem('vibex_current_user', JSON.stringify(updatedUser));
                     
                     if (isSupabaseConfigured) {
-                      dbUpsertUser(updatedUser);
+                      dbUpsertUser(updatedUser).then(res => {
+                        if (res && !res.success) {
+                          console.error('Failed to sync user points to Supabase:', res.error);
+                        }
+                      });
                     }
                     
                     setRegisteredUsers(prevUsers => {
@@ -2575,8 +2590,6 @@ export default function App() {
                   setBuyerEmail('');
                   setBuyerAddress('');
                   setBuyerPhone('');
-
-                  triggerToast('Order placed successfully! ID: #' + newOrder.id);
                 }}
                 className="space-y-4 text-left"
               >

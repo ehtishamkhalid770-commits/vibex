@@ -1,8 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 import { Product, Order } from '../types';
 
-const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY || '';
+const supabaseUrl = 
+  (import.meta as any).env?.VITE_SUPABASE_URL || 
+  (typeof process !== 'undefined' ? (process as any).env?.VITE_SUPABASE_URL : '') || 
+  '';
+const supabaseAnonKey = 
+  (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || 
+  (typeof process !== 'undefined' ? (process as any).env?.VITE_SUPABASE_ANON_KEY : '') || 
+  '';
 
 export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey);
 
@@ -109,29 +115,34 @@ export async function dbGetProducts(): Promise<Product[] | null> {
 }
 
 // 2. Save products to Supabase (upsert multiple or insert)
-export async function dbUpsertProduct(p: Product): Promise<boolean> {
-  if (!supabase) return false;
-  const { error } = await supabase
-    .from('vibex_products')
-    .upsert({
-      id: p.id,
-      name: p.name,
-      price: p.price,
-      category: p.category,
-      gender: p.gender,
-      image: p.image,
-      desc: p.desc,
-      rating: p.rating || 5.0,
-      reviews: p.reviews || 1,
-      sizes: p.sizes,
-      colors: p.colors,
-      isNew: p.isNew
-    });
-  if (error) {
-    console.error('Supabase upsert product error:', error);
-    return false;
+export async function dbUpsertProduct(p: Product): Promise<{ success: boolean; error?: any }> {
+  if (!supabase) return { success: false, error: 'Supabase is not configured.' };
+  try {
+    const { error } = await supabase
+      .from('vibex_products')
+      .upsert({
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        category: p.category,
+        gender: p.gender,
+        image: p.image,
+        desc: p.desc,
+        rating: p.rating || 5.0,
+        reviews: p.reviews || 1,
+        sizes: p.sizes,
+        colors: p.colors,
+        isNew: p.isNew
+      });
+    if (error) {
+      console.error('Supabase upsert product error:', error);
+      return { success: false, error };
+    }
+    return { success: true };
+  } catch (err: any) {
+    console.error('Supabase upsert product exception:', err);
+    return { success: false, error: err };
   }
-  return true;
 }
 
 // 3. Delete product from Supabase
@@ -163,29 +174,34 @@ export async function dbGetOrders(): Promise<Order[] | null> {
 }
 
 // 5. Save order (upsert or insert)
-export async function dbUpsertOrder(o: Order): Promise<boolean> {
-  if (!supabase) return false;
-  const { error } = await supabase
-    .from('vibex_orders')
-    .upsert({
-      id: o.id,
-      date: o.date,
-      status: o.status,
-      buyerName: o.buyerName,
-      buyerEmail: o.buyerEmail,
-      buyerPhone: o.buyerPhone,
-      buyerAddress: o.buyerAddress,
-      items: o.items,
-      subtotal: o.subtotal,
-      shipping: o.shipping,
-      discount: o.discount,
-      total: o.total
-    });
-  if (error) {
-    console.error('Supabase upsert order error:', error);
-    return false;
+export async function dbUpsertOrder(o: Order): Promise<{ success: boolean; error?: any }> {
+  if (!supabase) return { success: false, error: 'Supabase is not configured.' };
+  try {
+    const { error } = await supabase
+      .from('vibex_orders')
+      .upsert({
+        id: o.id,
+        date: o.date,
+        status: o.status,
+        buyerName: o.buyerName,
+        buyerEmail: o.buyerEmail,
+        buyerPhone: o.buyerPhone,
+        buyerAddress: o.buyerAddress,
+        items: o.items,
+        subtotal: o.subtotal,
+        shipping: o.shipping,
+        discount: o.discount,
+        total: o.total
+      });
+    if (error) {
+      console.error('Supabase upsert order error:', error);
+      return { success: false, error };
+    }
+    return { success: true };
+  } catch (err: any) {
+    console.error('Supabase upsert order exception:', err);
+    return { success: false, error: err };
   }
-  return true;
 }
 
 // 6. Delete order
@@ -216,23 +232,28 @@ export async function dbGetUsers(): Promise<any[] | null> {
 }
 
 // 8. Upsert user
-export async function dbUpsertUser(user: { email: string; name: string; password?: string; points: number; isAdmin?: boolean }): Promise<boolean> {
-  if (!supabase) return false;
-  const payload: any = {
-    email: user.email.toLowerCase(),
-    name: user.name,
-    points: user.points,
-    isAdmin: !!user.isAdmin
-  };
-  if (user.password !== undefined) {
-    payload.password = user.password;
+export async function dbUpsertUser(user: { email: string; name: string; password?: string; points: number; isAdmin?: boolean }): Promise<{ success: boolean; error?: any }> {
+  if (!supabase) return { success: false, error: 'Supabase is not configured.' };
+  try {
+    const payload: any = {
+      email: user.email.toLowerCase(),
+      name: user.name,
+      points: user.points,
+      isAdmin: !!user.isAdmin
+    };
+    if (user.password !== undefined) {
+      payload.password = user.password;
+    }
+    const { error } = await supabase
+      .from('vibex_users')
+      .upsert(payload);
+    if (error) {
+      console.error('Supabase upsert user error:', error);
+      return { success: false, error };
+    }
+    return { success: true };
+  } catch (err: any) {
+    console.error('Supabase upsert user exception:', err);
+    return { success: false, error: err };
   }
-  const { error } = await supabase
-    .from('vibex_users')
-    .upsert(payload);
-  if (error) {
-    console.error('Supabase upsert user error:', error);
-    return false;
-  }
-  return true;
 }

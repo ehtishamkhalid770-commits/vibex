@@ -243,20 +243,26 @@ export default function AdminDashboard({
   };
 
   const handleStatusChange = (orderId: string, newStatus: Order['status']) => {
+    let orderToUpdate: Order | undefined;
     setOrders(prev => {
       const updated = prev.map(o => {
         if (o.id === orderId) {
-          const updatedOrder = { ...o, status: newStatus };
-          if (isSupabaseConfigured) {
-            dbUpsertOrder(updatedOrder);
-          }
-          return updatedOrder;
+          orderToUpdate = { ...o, status: newStatus };
+          return orderToUpdate;
         }
         return o;
       });
       localStorage.setItem('vibex_orders', JSON.stringify(updated));
       return updated;
     });
+
+    if (orderToUpdate && isSupabaseConfigured) {
+      dbUpsertOrder(orderToUpdate).then(res => {
+        if (res && !res.success) {
+          console.error('Failed to sync updated order to Supabase:', res.error);
+        }
+      });
+    }
   };
 
   const handleDeleteOrder = (orderId: string) => {

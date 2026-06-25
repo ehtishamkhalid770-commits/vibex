@@ -100,7 +100,7 @@ export async function testConnection(): Promise<{ success: boolean; hasTables?: 
   }
 }
 
-// 1. Fetch products from Supabase
+// 1. Fetch products from Supabase with dynamic case normalization and safe data types
 export async function dbGetProducts(): Promise<Product[] | null> {
   if (!supabase) return null;
   const { data, error } = await supabase
@@ -111,7 +111,22 @@ export async function dbGetProducts(): Promise<Product[] | null> {
     console.error('Supabase get products error:', error);
     return null;
   }
-  return data as Product[];
+  if (!data) return [];
+  
+  return data.map((item: any) => ({
+    id: item.id,
+    name: item.name,
+    price: Number(item.price),
+    category: item.category,
+    gender: item.gender,
+    image: item.image,
+    rating: item.rating !== undefined ? Number(item.rating) : 5.0,
+    desc: item.desc !== undefined ? item.desc : (item.description || ''),
+    reviews: item.reviews !== undefined ? Number(item.reviews) : 1,
+    sizes: item.sizes || ['M', 'L', 'XL'],
+    colors: item.colors || [],
+    isNew: item.isNew !== undefined ? !!item.isNew : (item.isnew !== undefined ? !!item.isnew : true)
+  })) as Product[];
 }
 
 // 2. Save products to Supabase (upsert multiple or insert)
@@ -147,6 +162,18 @@ export async function dbUpsertProduct(p: Product): Promise<{ success: boolean; e
 
       console.warn(`Product upsert attempt ${attempts + 1} failed:`, error);
 
+      // Fast-path: if primary attempt failed, convert all keys to lowercase for lowercase-column tables
+      if (attempts === 0) {
+        console.warn('Primary product upsert failed. Retrying with all keys lowercase...');
+        const lowercasePayload: any = {};
+        for (const key of Object.keys(payload)) {
+          lowercasePayload[key.toLowerCase()] = payload[key];
+        }
+        payload = lowercasePayload;
+        attempts++;
+        continue;
+      }
+
       if (error.code === '42703' || (error.message && error.message.toLowerCase().includes('does not exist'))) {
         const missingCol = extractMissingColumn(error.message);
         if (missingCol) {
@@ -179,12 +206,18 @@ export async function dbUpsertProduct(p: Product): Promise<{ success: boolean; e
   }
 }
 
-// Helper to extract missing column names from postgres error messages
+// Helper to extract missing column names from postgres error messages (quoted or unquoted)
 function extractMissingColumn(message: string): string | null {
   if (!message) return null;
-  const match = message.match(/column "([^"]+)"/i);
-  if (match && match[1]) {
-    return match[1];
+  // Match column "name"
+  const matchQuoted = message.match(/column "([^"]+)"/i);
+  if (matchQuoted && matchQuoted[1]) {
+    return matchQuoted[1];
+  }
+  // Match column name of relation
+  const matchUnquoted = message.match(/column (\w+) of relation/i);
+  if (matchUnquoted && matchUnquoted[1]) {
+    return matchUnquoted[1];
   }
   return null;
 }
@@ -267,6 +300,18 @@ export async function dbUpsertOrder(o: Order): Promise<{ success: boolean; error
       }
 
       console.warn(`Upsert order attempt ${attempts + 1} failed:`, error);
+
+      // Fast-path: if primary attempt failed, convert all keys to lowercase for lowercase-column tables
+      if (attempts === 0) {
+        console.warn('Primary order upsert failed. Retrying with all keys lowercase...');
+        const lowercasePayload: any = {};
+        for (const key of Object.keys(payload)) {
+          lowercasePayload[key.toLowerCase()] = payload[key];
+        }
+        payload = lowercasePayload;
+        attempts++;
+        continue;
+      }
 
       // Check if it's an undefined column error (42703) or generic "does not exist"
       if (error.code === '42703' || (error.message && error.message.toLowerCase().includes('does not exist'))) {

@@ -131,36 +131,50 @@ export default function AdminDashboard({
 
     if (editingId) {
       // Edit Mode
-      setProducts(prev => {
-        const updated = prev.map(p => {
-          if (p.id === editingId) {
-            const updatedProduct = {
-              ...p,
-              name,
-              price: priceNum,
-              category,
-              gender,
-              image,
-              desc,
-              sizes,
-              colors,
-              isNew
-            };
-            if (isSupabaseConfigured) {
-              dbUpsertProduct(updatedProduct);
-            }
-            return updatedProduct;
-          }
-          return p;
-        });
-        localStorage.setItem('vibex_products', JSON.stringify(updated));
-        return updated;
-      });
+      const existingProduct = products.find(p => p.id === editingId);
+      if (!existingProduct) return;
+      
+      const updatedProduct: Product = {
+        ...existingProduct,
+        name,
+        price: priceNum,
+        category,
+        gender,
+        image,
+        desc,
+        sizes,
+        colors,
+        isNew
+      };
 
-      setSuccessMsg('Product updated successfully!');
-      setTimeout(() => {
-        cancelEditProduct();
-      }, 500);
+      if (isSupabaseConfigured) {
+        dbUpsertProduct(updatedProduct).then(res => {
+          if (!res.success) {
+            console.error('Supabase update product error:', res.error);
+            setFormError(`Failed to save to Supabase: ${res.error?.message || JSON.stringify(res.error)}. Please verify your database connection, tables, and Row-Level Security (RLS) policies.`);
+          } else {
+            setProducts(prev => {
+              const updated = prev.map(p => p.id === editingId ? updatedProduct : p);
+              localStorage.setItem('vibex_products', JSON.stringify(updated));
+              return updated;
+            });
+            setSuccessMsg('Product updated successfully in Database and local cache!');
+            setTimeout(() => {
+              cancelEditProduct();
+            }, 800);
+          }
+        });
+      } else {
+        setProducts(prev => {
+          const updated = prev.map(p => p.id === editingId ? updatedProduct : p);
+          localStorage.setItem('vibex_products', JSON.stringify(updated));
+          return updated;
+        });
+        setSuccessMsg('Product updated successfully (Offline Sandbox)!');
+        setTimeout(() => {
+          cancelEditProduct();
+        }, 800);
+      }
     } else {
       // Add Mode
       const newProduct: Product = {
@@ -178,76 +192,123 @@ export default function AdminDashboard({
         isNew
       };
 
-      setProducts(prev => {
-        const updated = [newProduct, ...prev];
-        localStorage.setItem('vibex_products', JSON.stringify(updated));
-        if (isSupabaseConfigured) {
-          dbUpsertProduct(newProduct);
-        }
-        return updated;
-      });
-
-      setSuccessMsg('Product added successfully!');
-      
-      // Clear form
-      setName('');
-      setPrice('');
-      setCategory('Tees');
-      setGender('Unisex');
-      setImage('');
-      setDesc('');
-      setSizes(['M', 'L', 'XL']);
-      setColors([{ name: 'Vintage Black', hex: '#1a1a1a' }]);
-      setIsNew(true);
+      if (isSupabaseConfigured) {
+        dbUpsertProduct(newProduct).then(res => {
+          if (!res.success) {
+            console.error('Supabase add product error:', res.error);
+            setFormError(`Failed to save to Supabase: ${res.error?.message || JSON.stringify(res.error)}. Please verify your database connection, tables, and Row-Level Security (RLS) policies.`);
+          } else {
+            setProducts(prev => {
+              const updated = [newProduct, ...prev];
+              localStorage.setItem('vibex_products', JSON.stringify(updated));
+              return updated;
+            });
+            setSuccessMsg('Product added successfully to Database and local cache!');
+            // Clear form
+            setName('');
+            setPrice('');
+            setCategory('Tees');
+            setGender('Unisex');
+            setImage('');
+            setDesc('');
+            setSizes(['M', 'L', 'XL']);
+            setColors([{ name: 'Vintage Black', hex: '#1a1a1a' }]);
+            setIsNew(true);
+          }
+        });
+      } else {
+        setProducts(prev => {
+          const updated = [newProduct, ...prev];
+          localStorage.setItem('vibex_products', JSON.stringify(updated));
+          return updated;
+        });
+        setSuccessMsg('Product added successfully (Offline Sandbox)!');
+        // Clear form
+        setName('');
+        setPrice('');
+        setCategory('Tees');
+        setGender('Unisex');
+        setImage('');
+        setDesc('');
+        setSizes(['M', 'L', 'XL']);
+        setColors([{ name: 'Vintage Black', hex: '#1a1a1a' }]);
+        setIsNew(true);
+      }
     }
   };
 
   const handleDeleteProduct = (productId: string) => {
     if (confirm('Are you sure you want to delete this product? This action cannot be undone.')) {
-      setProducts(prev => {
-        const updated = prev.filter(p => p.id !== productId);
-        localStorage.setItem('vibex_products', JSON.stringify(updated));
-        if (isSupabaseConfigured) {
-          dbDeleteProduct(productId);
-        }
-        return updated;
-      });
+      if (isSupabaseConfigured) {
+        dbDeleteProduct(productId).then(success => {
+          if (success) {
+            setProducts(prev => {
+              const updated = prev.filter(p => p.id !== productId);
+              localStorage.setItem('vibex_products', JSON.stringify(updated));
+              return updated;
+            });
+          } else {
+            alert('Failed to delete product from Supabase database. Please check your network and RLS policies.');
+          }
+        });
+      } else {
+        setProducts(prev => {
+          const updated = prev.filter(p => p.id !== productId);
+          localStorage.setItem('vibex_products', JSON.stringify(updated));
+          return updated;
+        });
+      }
     }
   };
 
   const handleStatusChange = (orderId: string, newStatus: Order['status']) => {
-    let orderToUpdate: Order | undefined;
-    setOrders(prev => {
-      const updated = prev.map(o => {
-        if (o.id === orderId) {
-          orderToUpdate = { ...o, status: newStatus };
-          return orderToUpdate;
-        }
-        return o;
-      });
-      localStorage.setItem('vibex_orders', JSON.stringify(updated));
-      return updated;
-    });
+    const existingOrder = orders.find(o => o.id === orderId);
+    if (!existingOrder) return;
+    const orderToUpdate = { ...existingOrder, status: newStatus };
 
-    if (orderToUpdate && isSupabaseConfigured) {
+    if (isSupabaseConfigured) {
       dbUpsertOrder(orderToUpdate).then(res => {
-        if (res && !res.success) {
-          console.error('Failed to sync updated order to Supabase:', res.error);
+        if (res && res.success) {
+          setOrders(prev => {
+            const updated = prev.map(o => o.id === orderId ? orderToUpdate : o);
+            localStorage.setItem('vibex_orders', JSON.stringify(updated));
+            return updated;
+          });
+        } else {
+          console.error('Failed to sync updated order to Supabase:', res?.error);
+          alert(`Failed to save updated status to Supabase: ${res?.error?.message || JSON.stringify(res?.error)}`);
         }
+      });
+    } else {
+      setOrders(prev => {
+        const updated = prev.map(o => o.id === orderId ? orderToUpdate : o);
+        localStorage.setItem('vibex_orders', JSON.stringify(updated));
+        return updated;
       });
     }
   };
 
   const handleDeleteOrder = (orderId: string) => {
     if (confirm('Are you sure you want to delete this order record? This action cannot be undone.')) {
-      setOrders(prev => {
-        const updated = prev.filter(o => o.id !== orderId);
-        localStorage.setItem('vibex_orders', JSON.stringify(updated));
-        if (isSupabaseConfigured) {
-          dbDeleteOrder(orderId);
-        }
-        return updated;
-      });
+      if (isSupabaseConfigured) {
+        dbDeleteOrder(orderId).then(success => {
+          if (success) {
+            setOrders(prev => {
+              const updated = prev.filter(o => o.id !== orderId);
+              localStorage.setItem('vibex_orders', JSON.stringify(updated));
+              return updated;
+            });
+          } else {
+            alert('Failed to delete order from Supabase database. Please check your network and RLS policies.');
+          }
+        });
+      } else {
+        setOrders(prev => {
+          const updated = prev.filter(o => o.id !== orderId);
+          localStorage.setItem('vibex_orders', JSON.stringify(updated));
+          return updated;
+        });
+      }
     }
   };
 

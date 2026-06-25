@@ -222,8 +222,15 @@ export default function App() {
               localStorage.setItem('vibex_products', JSON.stringify(dbProducts));
             } else {
               // Seed products table if empty
+              console.log('Seeding products table in Supabase...');
               for (const p of allProducts) {
                 await dbUpsertProduct(p);
+              }
+              // Re-fetch to normalize properties correctly from the database
+              const reFetched = await dbGetProducts();
+              if (reFetched && reFetched.length > 0) {
+                setAllProducts(reFetched);
+                localStorage.setItem('vibex_products', JSON.stringify(reFetched));
               }
             }
 

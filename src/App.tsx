@@ -227,11 +227,27 @@ export default function App() {
               }
             }
 
-            // Fetch orders
+            // Fetch and merge orders to prevent wiping out newly placed local orders
             const dbOrders = await dbGetOrders();
-            if (dbOrders && dbOrders.length > 0) {
-              setOrders(dbOrders);
-              localStorage.setItem('vibex_orders', JSON.stringify(dbOrders));
+            if (dbOrders) {
+              const savedLocalOrdersStr = localStorage.getItem('vibex_orders');
+              const localOrders: Order[] = savedLocalOrdersStr ? JSON.parse(savedLocalOrdersStr) : orders;
+              
+              const dbOrderIds = new Set(dbOrders.map(o => o.id));
+              const unsyncedOrders = localOrders.filter(o => !dbOrderIds.has(o.id));
+              
+              if (unsyncedOrders.length > 0) {
+                console.log(`Syncing ${unsyncedOrders.length} unsynced orders to Supabase...`);
+                for (const o of unsyncedOrders) {
+                  await dbUpsertOrder(o);
+                }
+                const finalOrders = [...unsyncedOrders, ...dbOrders];
+                setOrders(finalOrders);
+                localStorage.setItem('vibex_orders', JSON.stringify(finalOrders));
+              } else {
+                setOrders(dbOrders);
+                localStorage.setItem('vibex_orders', JSON.stringify(dbOrders));
+              }
             } else if (dbOrders && dbOrders.length === 0) {
               // Seed orders table if empty in Supabase but we have local orders
               for (const o of orders) {
@@ -239,18 +255,35 @@ export default function App() {
               }
             }
 
-            // Fetch users
+            // Fetch and merge users to prevent wiping out newly registered local users
             const dbUsers = await dbGetUsers();
-            if (dbUsers && dbUsers.length > 0) {
-              const formattedUsers = dbUsers.map(u => ({
+            if (dbUsers) {
+              const savedLocalUsersStr = localStorage.getItem('vibex_registered_users');
+              const localUsers = savedLocalUsersStr ? JSON.parse(savedLocalUsersStr) : registeredUsers;
+              
+              const dbEmails = new Set(dbUsers.map(u => u.email.toLowerCase()));
+              const unsyncedUsers = localUsers.filter((u: any) => !dbEmails.has(u.email.toLowerCase()));
+              
+              const formattedDbUsers = dbUsers.map(u => ({
                 email: u.email,
                 name: u.name,
                 password: u.password,
                 points: u.points,
                 isAdmin: u.isAdmin
               }));
-              setRegisteredUsers(formattedUsers);
-              localStorage.setItem('vibex_registered_users', JSON.stringify(formattedUsers));
+
+              if (unsyncedUsers.length > 0) {
+                console.log(`Syncing ${unsyncedUsers.length} unsynced users to Supabase...`);
+                for (const u of unsyncedUsers) {
+                  await dbUpsertUser(u);
+                }
+                const finalUsers = [...unsyncedUsers, ...formattedDbUsers];
+                setRegisteredUsers(finalUsers);
+                localStorage.setItem('vibex_registered_users', JSON.stringify(finalUsers));
+              } else {
+                setRegisteredUsers(formattedDbUsers);
+                localStorage.setItem('vibex_registered_users', JSON.stringify(formattedDbUsers));
+              }
             } else if (dbUsers && dbUsers.length === 0) {
               // Seed users table if empty in Supabase but we have local users
               for (const u of registeredUsers) {

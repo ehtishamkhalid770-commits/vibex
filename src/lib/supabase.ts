@@ -3,11 +3,11 @@ import { Product, Order } from '../types';
 
 const supabaseUrl = 
   (import.meta as any).env?.VITE_SUPABASE_URL || 
-  (typeof process !== 'undefined' ? (process as any).env?.VITE_SUPABASE_URL : '') || 
+  (typeof process !== 'undefined' ? process.env.VITE_SUPABASE_URL : '') || 
   '';
 const supabaseAnonKey = 
   (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || 
-  (typeof process !== 'undefined' ? (process as any).env?.VITE_SUPABASE_ANON_KEY : '') || 
+  (typeof process !== 'undefined' ? process.env.VITE_SUPABASE_ANON_KEY : '') || 
   '';
 
 export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey);
@@ -170,30 +170,83 @@ export async function dbGetOrders(): Promise<Order[] | null> {
     console.error('Supabase get orders error:', error);
     return null;
   }
-  return data as Order[];
+  if (!data) return [];
+  
+  // Normalize column case dynamically (buyername -> buyerName, etc.)
+  return data.map((item: any) => ({
+    id: item.id,
+    date: item.date,
+    status: item.status,
+    buyerName: item.buyerName !== undefined ? item.buyerName : (item.buyername || ''),
+    buyerEmail: item.buyerEmail !== undefined ? item.buyerEmail : (item.buyeremail || ''),
+    buyerPhone: item.buyerPhone !== undefined ? item.buyerPhone : (item.buyerphone || ''),
+    buyerAddress: item.buyerAddress !== undefined ? item.buyerAddress : (item.buyeraddress || ''),
+    items: item.items || [],
+    subtotal: Number(item.subtotal),
+    shipping: Number(item.shipping),
+    discount: Number(item.discount),
+    total: Number(item.total)
+  })) as Order[];
 }
 
 // 5. Save order (upsert or insert)
 export async function dbUpsertOrder(o: Order): Promise<{ success: boolean; error?: any }> {
   if (!supabase) return { success: false, error: 'Supabase is not configured.' };
   try {
+    const payload: any = {
+      id: o.id,
+      date: o.date,
+      status: o.status,
+      buyerName: o.buyerName,
+      buyerEmail: o.buyerEmail,
+      buyerPhone: o.buyerPhone,
+      buyerAddress: o.buyerAddress,
+      items: o.items,
+      subtotal: o.subtotal,
+      shipping: o.shipping,
+      discount: o.discount,
+      total: o.total
+    };
+    
     const { error } = await supabase
       .from('vibex_orders')
-      .upsert({
-        id: o.id,
-        date: o.date,
-        status: o.status,
-        buyerName: o.buyerName,
-        buyerEmail: o.buyerEmail,
-        buyerPhone: o.buyerPhone,
-        buyerAddress: o.buyerAddress,
-        items: o.items,
-        subtotal: o.subtotal,
-        shipping: o.shipping,
-        discount: o.discount,
-        total: o.total
-      });
+      .upsert(payload);
+    
     if (error) {
+      // If error code is 42703 (undefined column) or message references uppercase column names, 
+      // retry using all-lowercase column names.
+      if (error.code === '42703' || (error.message && (
+        error.message.includes('buyerName') || 
+        error.message.includes('buyerEmail') || 
+        error.message.includes('buyerPhone') || 
+        error.message.includes('buyerAddress')
+      ))) {
+        console.warn('Column case mismatch detected. Retrying with lowercase columns...');
+        const lowercasePayload = {
+          id: o.id,
+          date: o.date,
+          status: o.status,
+          buyername: o.buyerName,
+          buyeremail: o.buyerEmail,
+          buyerphone: o.buyerPhone,
+          buyeraddress: o.buyerAddress,
+          items: o.items,
+          subtotal: o.subtotal,
+          shipping: o.shipping,
+          discount: o.discount,
+          total: o.total
+        };
+        const { error: retryError } = await supabase
+          .from('vibex_orders')
+          .upsert(lowercasePayload);
+        
+        if (retryError) {
+          console.error('Supabase upsert order retry error:', retryError);
+          return { success: false, error: retryError };
+        }
+        return { success: true };
+      }
+      
       console.error('Supabase upsert order error:', error);
       return { success: false, error };
     }
@@ -228,7 +281,14 @@ export async function dbGetUsers(): Promise<any[] | null> {
     console.error('Supabase get users error:', error);
     return null;
   }
-  return data;
+  if (!data) return [];
+  return data.map((u: any) => ({
+    email: u.email,
+    name: u.name,
+    password: u.password,
+    points: u.points,
+    isAdmin: u.isAdmin !== undefined ? u.isAdmin : (u.isadmin || false)
+  }));
 }
 
 // 8. Upsert user
@@ -248,6 +308,28 @@ export async function dbUpsertUser(user: { email: string; name: string; password
       .from('vibex_users')
       .upsert(payload);
     if (error) {
+      // If error code is 42703 (undefined column) or message references uppercase isAdmin,
+      // retry using all-lowercase isadmin column name.
+      if (error.code === '42703' || (error.message && error.message.includes('isAdmin'))) {
+        console.warn('Column case mismatch detected for user. Retrying with isadmin...');
+        const lowercasePayload = {
+          email: user.email.toLowerCase(),
+          name: user.name,
+          points: user.points,
+          isadmin: !!user.isAdmin
+        } as any;
+        if (user.password !== undefined) {
+          lowercasePayload.password = user.password;
+        }
+        const { error: retryError } = await supabase
+          .from('vibex_users')
+          .upsert(lowercasePayload);
+        if (retryError) {
+          console.error('Supabase upsert user retry error:', retryError);
+          return { success: false, error: retryError };
+        }
+        return { success: true };
+      }
       console.error('Supabase upsert user error:', error);
       return { success: false, error };
     }

@@ -56,7 +56,7 @@ export default function AdminDashboard({
   onClose 
 }: AdminDashboardProps) {
   
-  const [activeTab, setActiveTab] = useState<'analytics' | 'products' | 'orders' | 'database'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'products' | 'orders'>('analytics');
   
   // Editing state for products
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -76,34 +76,7 @@ export default function AdminDashboard({
   const [formError, setFormError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
-  // Supabase test status
-  const [supabaseTest, setSupabaseTest] = useState<{ success: boolean; hasTables?: boolean; message: string } | null>(null);
-  const [isTestingSupabase, setIsTestingSupabase] = useState(false);
-  const [showSqlSchema, setShowSqlSchema] = useState(false);
-  const [copiedSql, setCopiedSql] = useState(false);
 
-  useEffect(() => {
-    if (isSupabaseConfigured) {
-      setIsTestingSupabase(true);
-      testConnection().then(res => {
-        setSupabaseTest(res);
-        setIsTestingSupabase(false);
-      });
-    }
-  }, []);
-
-  const runSupabaseTest = async () => {
-    setIsTestingSupabase(true);
-    const res = await testConnection();
-    setSupabaseTest(res);
-    setIsTestingSupabase(false);
-  };
-
-  const copySqlToClipboard = () => {
-    navigator.clipboard.writeText(SQL_SCHEMA_SETUP);
-    setCopiedSql(true);
-    setTimeout(() => setCopiedSql(false), 2000);
-  };
 
   const startEditProduct = (p: Product) => {
     setEditingId(p.id);
@@ -353,50 +326,11 @@ export default function AdminDashboard({
             )}
           </button>
 
-          <button 
-            onClick={() => setActiveTab('database')}
-            className={`flex items-center gap-3 px-4 py-3 rounded text-left font-mono text-xs uppercase tracking-widest transition-all shrink-0 relative cursor-pointer ${activeTab === 'database' ? 'bg-[#c25121] text-white font-bold' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'}`}
-          >
-            <Database className="w-4 h-4" />
-            <span>Database Setup</span>
-            <span className={`w-2 h-2 rounded-full ml-auto ${isSupabaseConfigured ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
-          </button>
-
-          <div className="hidden md:flex flex-col mt-auto p-4 bg-zinc-950/80 border border-zinc-900 rounded font-mono text-[10px] text-zinc-500 space-y-2">
-            <span className="font-bold text-zinc-400">DATABASE INTEGRATION</span>
-            <div className="flex items-center gap-2">
-              <span className={`w-1.5 h-1.5 rounded-full ${isSupabaseConfigured ? 'bg-emerald-500 animate-ping' : 'bg-amber-500'}`}></span>
-              <span>{isSupabaseConfigured ? 'Supabase Active' : 'Offline Sandbox'}</span>
-            </div>
-            <span className="text-[9px]">Tables synced dynamically.</span>
-          </div>
         </div>
 
         {/* Right Content Area */}
         <div className="flex-grow p-6 sm:p-8 overflow-y-auto bg-[#040404]">
-          {/* Missing Tables Notice */}
-          {isSupabaseConfigured && supabaseTest && supabaseTest.hasTables === false && (
-            <div className="mb-6 p-4 bg-amber-950/20 border border-amber-900/40 text-amber-300 rounded-lg text-xs font-mono flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-pulse">
-              <div className="flex items-start gap-2.5">
-                <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold text-amber-400 block uppercase tracking-wider text-[10px]">⚠️ Supabase Tables Missing / Tables Nahi Bani Hain</span>
-                  <p className="text-[11px] text-zinc-300 mt-1">
-                    Your database tables (vibex_products, vibex_orders, vibex_users) do not exist yet. Please run the SQL Setup Script to create them.
-                  </p>
-                </div>
-              </div>
-              <button 
-                onClick={() => {
-                  setActiveTab('database');
-                  setShowSqlSchema(true);
-                }}
-                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-black font-mono text-[10px] font-bold uppercase rounded cursor-pointer self-start sm:self-center shrink-0 transition-colors"
-              >
-                SETUP TABLES NOW
-              </button>
-            </div>
-          )}
+
 
           <AnimatePresence mode="wait">
             
@@ -790,109 +724,7 @@ export default function AdminDashboard({
               </motion.div>
             )}
 
-            {/* TAB: DATABASE / SUPABASE SETUP */}
-            {activeTab === 'database' && (
-              <motion.div 
-                key="database"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="space-y-8"
-              >
-                <div>
-                  <h2 className="text-xl font-bold tracking-widest uppercase text-white font-display">SUPABASE INTEGRATION</h2>
-                  <p className="text-xs text-zinc-400 font-mono">Verify keys, review sync states, and deploy your tables.</p>
-                </div>
 
-                <div className="bg-[#09090b] border border-zinc-900 p-6 rounded-lg space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2.5 rounded border ${isSupabaseConfigured ? 'bg-emerald-950/40 border-emerald-900/60 text-emerald-400' : 'bg-amber-950/40 border-amber-900/60 text-amber-400'}`}>
-                        <Database className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <h3 className="text-sm font-bold text-white">Connection Status</h3>
-                        <p className="text-[10px] font-mono text-zinc-500 mt-0.5">
-                          {isSupabaseConfigured ? 'API Keys detected in system environment.' : 'Currently running in local-only offline sandbox.'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {isSupabaseConfigured && (
-                      <button 
-                        onClick={runSupabaseTest}
-                        disabled={isTestingSupabase}
-                        className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 font-mono text-[10px] uppercase rounded flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-55"
-                      >
-                        <RefreshCw className={`w-3 h-3 ${isTestingSupabase ? 'animate-spin' : ''}`} />
-                        <span>TEST CLIENT</span>
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Supabase Test Output */}
-                  {isSupabaseConfigured && supabaseTest && (
-                    <div className={`p-4 rounded-md text-xs font-mono border ${
-                      supabaseTest.success && supabaseTest.hasTables !== false
-                        ? 'bg-emerald-950/20 border-emerald-900/40 text-emerald-400'
-                        : 'bg-amber-950/20 border-amber-900/40 text-amber-300'
-                    }`}>
-                      <div className="flex items-start gap-2.5">
-                        <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-                        <div className="space-y-1">
-                          <span className="font-bold block">Test Report:</span>
-                          <p>{supabaseTest.message}</p>
-                          {supabaseTest.success && supabaseTest.hasTables === false && (
-                            <button
-                              onClick={() => setShowSqlSchema(true)}
-                              className="mt-2 text-[10px] underline hover:text-white uppercase font-bold tracking-wider cursor-pointer"
-                            >
-                              DISPLAY SQL SETUP SCRIPT
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {!isSupabaseConfigured && (
-                    <div className="bg-zinc-950/80 border border-zinc-900 p-4 rounded text-xs font-mono text-zinc-400 space-y-2">
-                      <p className="text-amber-500 font-bold uppercase tracking-wider text-[10px]">⚠️ TO CONNECT YOUR SUPABASE DATABASE:</p>
-                      <ol className="list-decimal list-inside space-y-1.5 text-[11px] pl-1">
-                        <li>Go to the <span className="text-white font-bold">Settings -&gt; Secrets</span> menu in the AI Studio UI.</li>
-                        <li>Add your <span className="text-orange-400">VITE_SUPABASE_URL</span> and <span className="text-orange-400">VITE_SUPABASE_ANON_KEY</span> secrets.</li>
-                        <li>Restart the application for changes to take effect.</li>
-                      </ol>
-                    </div>
-                  )}
-                </div>
-
-                {/* SQL Schema Deployment Script */}
-                {(showSqlSchema || !isSupabaseConfigured) && (
-                  <div className="bg-[#09090b] border border-zinc-900 p-6 rounded-lg space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="text-xs font-mono font-bold text-[#c25121] uppercase tracking-widest">SQL Schema Script</h3>
-                        <p className="text-[10px] text-zinc-500 font-mono mt-0.5">Run this SQL inside Supabase SQL Editor to prepare table spaces.</p>
-                      </div>
-                      <button 
-                        onClick={copySqlToClipboard}
-                        className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 font-mono text-[10px] uppercase rounded flex items-center gap-1.5 transition-all cursor-pointer"
-                      >
-                        <Copy className="w-3 h-3" />
-                        <span>{copiedSql ? 'COPIED!' : 'COPY SQL'}</span>
-                      </button>
-                    </div>
-
-                    <div className="relative">
-                      <pre className="bg-black border border-zinc-900 rounded p-4 text-[10px] font-mono text-zinc-300 overflow-x-auto max-h-[350px] leading-relaxed">
-                        {SQL_SCHEMA_SETUP}
-                      </pre>
-                    </div>
-                  </div>
-                )}
-              </motion.div>
-            )}
 
           </AnimatePresence>
         </div>

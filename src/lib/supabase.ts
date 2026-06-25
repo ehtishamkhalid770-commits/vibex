@@ -118,31 +118,75 @@ export async function dbGetProducts(): Promise<Product[] | null> {
 export async function dbUpsertProduct(p: Product): Promise<{ success: boolean; error?: any }> {
   if (!supabase) return { success: false, error: 'Supabase is not configured.' };
   try {
-    const { error } = await supabase
-      .from('vibex_products')
-      .upsert({
-        id: p.id,
-        name: p.name,
-        price: p.price,
-        category: p.category,
-        gender: p.gender,
-        image: p.image,
-        desc: p.desc,
-        rating: p.rating || 5.0,
-        reviews: p.reviews || 1,
-        sizes: p.sizes,
-        colors: p.colors,
-        isNew: p.isNew
-      });
-    if (error) {
-      console.error('Supabase upsert product error:', error);
+    let payload: any = {
+      id: p.id,
+      name: p.name,
+      price: p.price,
+      category: p.category,
+      gender: p.gender,
+      image: p.image,
+      desc: p.desc,
+      rating: p.rating || 5.0,
+      reviews: p.reviews || 1,
+      sizes: p.sizes,
+      colors: p.colors,
+      isNew: p.isNew
+    };
+
+    let attempts = 0;
+    const maxAttempts = 12;
+
+    while (attempts < maxAttempts) {
+      const { error } = await supabase
+        .from('vibex_products')
+        .upsert(payload);
+
+      if (!error) {
+        return { success: true };
+      }
+
+      console.warn(`Product upsert attempt ${attempts + 1} failed:`, error);
+
+      if (error.code === '42703' || (error.message && error.message.toLowerCase().includes('does not exist'))) {
+        const missingCol = extractMissingColumn(error.message);
+        if (missingCol) {
+          const lowerCol = missingCol.toLowerCase();
+          if (missingCol !== lowerCol && payload[missingCol] !== undefined) {
+            console.warn(`Column "${missingCol}" does not exist. Retrying with lowercase version "${lowerCol}"...`);
+            payload[lowerCol] = payload[missingCol];
+            delete payload[missingCol];
+          } else {
+            console.warn(`Removing missing column "${missingCol}" from product payload and retrying...`);
+            delete payload[missingCol];
+            for (const key of Object.keys(payload)) {
+              if (key.toLowerCase() === lowerCol) {
+                delete payload[key];
+              }
+            }
+          }
+          attempts++;
+          continue;
+        }
+      }
+
       return { success: false, error };
     }
-    return { success: true };
+
+    return { success: false, error: 'Max product upsert retry attempts reached' };
   } catch (err: any) {
     console.error('Supabase upsert product exception:', err);
     return { success: false, error: err };
   }
+}
+
+// Helper to extract missing column names from postgres error messages
+function extractMissingColumn(message: string): string | null {
+  if (!message) return null;
+  const match = message.match(/column "([^"]+)"/i);
+  if (match && match[1]) {
+    return match[1];
+  }
+  return null;
 }
 
 // 3. Delete product from Supabase
@@ -189,11 +233,11 @@ export async function dbGetOrders(): Promise<Order[] | null> {
   })) as Order[];
 }
 
-// 5. Save order (upsert or insert)
+// 5. Save order (upsert or insert) with dynamic case-fallback and missing-column resilient mapping
 export async function dbUpsertOrder(o: Order): Promise<{ success: boolean; error?: any }> {
   if (!supabase) return { success: false, error: 'Supabase is not configured.' };
   try {
-    const payload: any = {
+    let payload: any = {
       id: o.id,
       date: o.date,
       status: o.status,
@@ -207,50 +251,50 @@ export async function dbUpsertOrder(o: Order): Promise<{ success: boolean; error
       discount: o.discount,
       total: o.total
     };
-    
-    const { error } = await supabase
-      .from('vibex_orders')
-      .upsert(payload);
-    
-    if (error) {
-      // If error code is 42703 (undefined column) or message references uppercase column names, 
-      // retry using all-lowercase column names.
-      if (error.code === '42703' || (error.message && (
-        error.message.includes('buyerName') || 
-        error.message.includes('buyerEmail') || 
-        error.message.includes('buyerPhone') || 
-        error.message.includes('buyerAddress')
-      ))) {
-        console.warn('Column case mismatch detected. Retrying with lowercase columns...');
-        const lowercasePayload = {
-          id: o.id,
-          date: o.date,
-          status: o.status,
-          buyername: o.buyerName,
-          buyeremail: o.buyerEmail,
-          buyerphone: o.buyerPhone,
-          buyeraddress: o.buyerAddress,
-          items: JSON.parse(JSON.stringify(o.items || [])),
-          subtotal: o.subtotal,
-          shipping: o.shipping,
-          discount: o.discount,
-          total: o.total
-        };
-        const { error: retryError } = await supabase
-          .from('vibex_orders')
-          .upsert(lowercasePayload);
-        
-        if (retryError) {
-          console.error('Supabase upsert order retry error:', retryError);
-          return { success: false, error: retryError };
-        }
+
+    let attempts = 0;
+    const maxAttempts = 12;
+
+    while (attempts < maxAttempts) {
+      console.log(`Attempting upsert order #${o.id} (attempt ${attempts + 1}). Payload keys:`, Object.keys(payload));
+      const { error } = await supabase
+        .from('vibex_orders')
+        .upsert(payload);
+
+      if (!error) {
+        console.log(`Successfully upserted order #${o.id}`);
         return { success: true };
       }
-      
-      console.error('Supabase upsert order error:', error);
+
+      console.warn(`Upsert order attempt ${attempts + 1} failed:`, error);
+
+      // Check if it's an undefined column error (42703) or generic "does not exist"
+      if (error.code === '42703' || (error.message && error.message.toLowerCase().includes('does not exist'))) {
+        const missingCol = extractMissingColumn(error.message);
+        if (missingCol) {
+          const lowerCol = missingCol.toLowerCase();
+          if (missingCol !== lowerCol && payload[missingCol] !== undefined) {
+            console.warn(`Column "${missingCol}" does not exist. Retrying with lowercase version "${lowerCol}"...`);
+            payload[lowerCol] = payload[missingCol];
+            delete payload[missingCol];
+          } else {
+            console.warn(`Removing missing column "${missingCol}" from order payload and retrying...`);
+            delete payload[missingCol];
+            for (const key of Object.keys(payload)) {
+              if (key.toLowerCase() === lowerCol) {
+                delete payload[key];
+              }
+            }
+          }
+          attempts++;
+          continue;
+        }
+      }
+
       return { success: false, error };
     }
-    return { success: true };
+
+    return { success: false, error: 'Max order upsert retry attempts reached' };
   } catch (err: any) {
     console.error('Supabase upsert order exception:', err);
     return { success: false, error: err };
@@ -291,11 +335,11 @@ export async function dbGetUsers(): Promise<any[] | null> {
   }));
 }
 
-// 8. Upsert user
+// 8. Upsert user with dynamic case-fallback and missing-column resilient mapping
 export async function dbUpsertUser(user: { email: string; name: string; password?: string; points: number; isAdmin?: boolean }): Promise<{ success: boolean; error?: any }> {
   if (!supabase) return { success: false, error: 'Supabase is not configured.' };
   try {
-    const payload: any = {
+    let payload: any = {
       email: user.email.toLowerCase(),
       name: user.name,
       points: user.points,
@@ -304,36 +348,47 @@ export async function dbUpsertUser(user: { email: string; name: string; password
     if (user.password !== undefined) {
       payload.password = user.password;
     }
-    const { error } = await supabase
-      .from('vibex_users')
-      .upsert(payload);
-    if (error) {
-      // If error code is 42703 (undefined column) or message references uppercase isAdmin,
-      // retry using all-lowercase isadmin column name.
-      if (error.code === '42703' || (error.message && error.message.includes('isAdmin'))) {
-        console.warn('Column case mismatch detected for user. Retrying with isadmin...');
-        const lowercasePayload = {
-          email: user.email.toLowerCase(),
-          name: user.name,
-          points: user.points,
-          isadmin: !!user.isAdmin
-        } as any;
-        if (user.password !== undefined) {
-          lowercasePayload.password = user.password;
-        }
-        const { error: retryError } = await supabase
-          .from('vibex_users')
-          .upsert(lowercasePayload);
-        if (retryError) {
-          console.error('Supabase upsert user retry error:', retryError);
-          return { success: false, error: retryError };
-        }
+
+    let attempts = 0;
+    const maxAttempts = 6;
+
+    while (attempts < maxAttempts) {
+      const { error } = await supabase
+        .from('vibex_users')
+        .upsert(payload);
+
+      if (!error) {
         return { success: true };
       }
-      console.error('Supabase upsert user error:', error);
+
+      console.warn(`Upsert user attempt ${attempts + 1} failed:`, error);
+
+      if (error.code === '42703' || (error.message && error.message.toLowerCase().includes('does not exist'))) {
+        const missingCol = extractMissingColumn(error.message);
+        if (missingCol) {
+          const lowerCol = missingCol.toLowerCase();
+          if (missingCol !== lowerCol && payload[missingCol] !== undefined) {
+            console.warn(`Column "${missingCol}" does not exist. Retrying with lowercase version "${lowerCol}"...`);
+            payload[lowerCol] = payload[missingCol];
+            delete payload[missingCol];
+          } else {
+            console.warn(`Removing missing column "${missingCol}" from user payload and retrying...`);
+            delete payload[missingCol];
+            for (const key of Object.keys(payload)) {
+              if (key.toLowerCase() === lowerCol) {
+                delete payload[key];
+              }
+            }
+          }
+          attempts++;
+          continue;
+        }
+      }
+
       return { success: false, error };
     }
-    return { success: true };
+
+    return { success: false, error: 'Max user upsert retry attempts reached' };
   } catch (err: any) {
     console.error('Supabase upsert user exception:', err);
     return { success: false, error: err };
